@@ -1,0 +1,11 @@
+With enging slash
+Matching : \$([a-zA-Z_]+?)/
+Replacing : \$\{$1\}/
+
+with spaces
+Matching : \$([a-zA-Z_]+?) 
+Replacing : \$\{$1\} 
+
+all cases : 
+Matching : \$([a-zA-Z_]+)
+Replacing : \$\{$1\}
