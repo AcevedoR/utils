@@ -15,7 +15,7 @@ pip install python-jenkins
 pip install git+http://github.com/bufordtaylor/python-texttable
 ``
 
-One Intractiv python script is required at : ../list-projects-to-release/list-projects-to-release-script.py
+One python script is required at : ../list-projects-to-release/list-projects-to-release-script.py
 
 
 If not located there then use -s "path/file.py" option
