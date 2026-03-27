@@ -57,4 +57,4 @@ Fetches PR metadata via `gh pr view`, cherry-picks all commits onto each target 
 kcheckout <branch>
 ```
 
-Runs `git checkout <branch>` in both `kestra` and `kestra-ee`. Can be run from inside either repo or from their parent directory.
+Runs `git checkout <branch>` then `git pull` in both `kestra` and `kestra-ee`, in parallel. Can be run from inside either repo or from their parent directory.
