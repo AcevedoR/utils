@@ -37,10 +37,19 @@ func main() {
 			continue
 		}
 		fmt.Printf("[%s] checking out %s...\n", r.name, branch)
-		cmd := exec.Command("git", "-C", r.dir, "checkout", branch)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		checkout := exec.Command("git", "-C", r.dir, "checkout", branch)
+		checkout.Stdout = os.Stdout
+		checkout.Stderr = os.Stderr
+		if err := checkout.Run(); err != nil {
+			exitCode = 1
+			continue
+		}
+
+		fmt.Printf("[%s] pulling...\n", r.name)
+		pull := exec.Command("git", "-C", r.dir, "pull")
+		pull.Stdout = os.Stdout
+		pull.Stderr = os.Stderr
+		if err := pull.Run(); err != nil {
 			exitCode = 1
 		}
 	}
