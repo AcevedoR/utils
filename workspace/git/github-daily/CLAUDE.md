@@ -38,6 +38,8 @@ backport <PR-number> <branch1> [branch2...]
 
 **Install locally:** `cd backport && make install` (uses goreleaser, installs to `/usr/local/bin/backport`)
 
+> After every change to the backport tool, run `make install` from `backport/` to update the local binary.
+
 **Release:** tag a commit and run `goreleaser release --clean` from `backport/`
 
 **How it works:**
