@@ -21,7 +21,7 @@ Examples:
 // stringSlice is a multi-value flag (--to can be repeated).
 type stringSlice []string
 
-func (s *stringSlice) String() string  { return strings.Join(*s, ", ") }
+func (s *stringSlice) String() string     { return strings.Join(*s, ", ") }
 func (s *stringSlice) Set(v string) error { *s = append(*s, v); return nil }
 
 func main() {

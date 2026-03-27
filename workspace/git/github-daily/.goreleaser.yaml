@@ -1,9 +1,26 @@
 version: 2
 
-project_name: backport
+project_name: github-daily
 
 builds:
-  - env:
+  - id: backport
+    main: ./cmd/backport
+    binary: backport
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+  - id: kcheckout
+    main: ./cmd/kcheckout
+    binary: kcheckout
+    env:
       - CGO_ENABLED=0
     goos:
       - linux

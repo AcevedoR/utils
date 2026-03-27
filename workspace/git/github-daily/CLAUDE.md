@@ -11,51 +11,50 @@ Scripts to streamline daily git and GitHub tasks. Four areas:
 - **Commit workflows** — stage helpers, conventional commit formatting, amend shortcuts
 - **GitHub automation** — issues, labels, milestones, releases via `gh` API
 
+## Project structure
+
+Single Go module at this directory level. Each binary lives under `cmd/`:
+
+```
+github-daily/
+├── go.mod
+├── Makefile
+├── .goreleaser.yaml
+└── cmd/
+    ├── backport/
+    └── kcheckout/
+```
+
 ## Dependencies
 
 - `git` — must be in PATH
 - `gh` CLI (GitHub CLI) — must be in PATH and authenticated (`gh auth status`)
 
-## Script Conventions
+## Build & install
 
-- Shebang: `#!/usr/bin/env bash`
-- Validate required args with `[ -z "$var" ]` → print usage + `exit 1`
-- Use `gh` CLI for all GitHub API calls (not raw `curl`)
-- Name scripts by area prefix: `pr-*.sh`, `commit-*.sh`, `branch-*.sh`, `gh-*.sh`
-- Output goes to stdout; keep messages concise and actionable
+**After every change, run:**
+```
+make install
+```
+This builds all binaries and installs them to `/usr/local/bin/`.
 
-## Tools
+**Release:** tag a commit and run `goreleaser release --clean` from this directory.
 
-### `kcheckout.sh` — checkout a branch in both kestra repos
+## Commands
+
+### `backport` — cherry-pick a PR onto other branches
+
+```
+backport <PR-number> <branch1> [branch2...]   explicit PR
+backport --to <branch1> [--to <branch2>...]   auto-detect PR from current branch
+```
+
+Fetches PR metadata via `gh pr view`, cherry-picks all commits onto each target branch, and opens new PRs. New PR title: `[Backport <target>] <original title>`. On conflict: aborts cleanly and prints manual steps to stderr.
+
+### `kcheckout` — checkout a branch in both kestra repos
 
 ```
 kcheckout <branch>
 ```
 
 Runs `git checkout <branch>` in both `kestra` and `kestra-ee`. Can be run from inside either repo or from their parent directory.
-
----
-
-
-
-### `backport/` — Go CLI
-
-Cherry-picks all commits from a PR onto one or more target branches and opens new PRs.
-
-```
-backport <PR-number> <branch1> [branch2...]
-```
-
-**Build:** `cd backport && go build -o backport .`
-
-**Install locally:** `cd backport && make install` (uses goreleaser, installs to `/usr/local/bin/backport`)
-
-> After every change to the backport tool, run `make install` from `backport/` to update the local binary.
-
-**Release:** tag a commit and run `goreleaser release --clean` from `backport/`
-
-**How it works:**
-1. Fetches PR metadata (title, body, commits) via `gh pr view`
-2. For each target branch: creates `backport/<PR>-<branch>`, cherry-picks, pushes, opens PR
-3. New PR title: `[Backport <target>] <original title>`, body references original PR
-4. On cherry-pick conflict: aborts cleanly and prints manual steps to stderr
