@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const usage = `kcheckout — checkout a branch in both kestra and kestra-ee repos
@@ -29,27 +31,55 @@ func main() {
 		os.Exit(1)
 	}
 
-	exitCode := 0
-	for _, r := range []struct{ dir, name string }{{kestraDir, "kestra"}, {kestraEEDir, "kestra-ee"}} {
-		if _, err := os.Stat(r.dir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "[%s] directory not found: %s\n", r.name, r.dir)
-			exitCode = 1
-			continue
-		}
-		fmt.Printf("[%s] checking out %s...\n", r.name, branch)
-		checkout := exec.Command("git", "-C", r.dir, "checkout", branch)
-		checkout.Stdout = os.Stdout
-		checkout.Stderr = os.Stderr
-		if err := checkout.Run(); err != nil {
-			exitCode = 1
-			continue
-		}
+	type result struct {
+		name   string
+		output string
+		failed bool
+	}
 
-		fmt.Printf("[%s] pulling...\n", r.name)
-		pull := exec.Command("git", "-C", r.dir, "pull")
-		pull.Stdout = os.Stdout
-		pull.Stderr = os.Stderr
-		if err := pull.Run(); err != nil {
+	repos := []struct{ dir, name string }{{kestraDir, "kestra"}, {kestraEEDir, "kestra-ee"}}
+	results := make([]result, len(repos))
+
+	var wg sync.WaitGroup
+	for i, r := range repos {
+		wg.Add(1)
+		go func(i int, dir, name string) {
+			defer wg.Done()
+			var buf bytes.Buffer
+			failed := false
+
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				fmt.Fprintf(&buf, "[%s] directory not found: %s\n", name, dir)
+				results[i] = result{name, buf.String(), true}
+				return
+			}
+
+			fmt.Fprintf(&buf, "[%s] checking out %s...\n", name, branch)
+			checkout := exec.Command("git", "-C", dir, "checkout", branch)
+			checkout.Stdout = &buf
+			checkout.Stderr = &buf
+			if err := checkout.Run(); err != nil {
+				results[i] = result{name, buf.String(), true}
+				return
+			}
+
+			fmt.Fprintf(&buf, "[%s] pulling...\n", name)
+			pull := exec.Command("git", "-C", dir, "pull")
+			pull.Stdout = &buf
+			pull.Stderr = &buf
+			if err := pull.Run(); err != nil {
+				failed = true
+			}
+
+			results[i] = result{name, buf.String(), failed}
+		}(i, r.dir, r.name)
+	}
+	wg.Wait()
+
+	exitCode := 0
+	for _, r := range results {
+		fmt.Print(r.output)
+		if r.failed {
 			exitCode = 1
 		}
 	}
