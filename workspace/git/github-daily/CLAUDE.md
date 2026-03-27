@@ -26,6 +26,18 @@ Scripts to streamline daily git and GitHub tasks. Four areas:
 
 ## Tools
 
+### `kcheckout.sh` — checkout a branch in both kestra repos
+
+```
+kcheckout <branch>
+```
+
+Runs `git checkout <branch>` in both `kestra` and `kestra-ee`. Can be run from inside either repo or from their parent directory.
+
+---
+
+
+
 ### `backport/` — Go CLI
 
 Cherry-picks all commits from a PR onto one or more target branches and opens new PRs.
