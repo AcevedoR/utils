@@ -25,11 +25,20 @@ func (pr PR) CommitOIDs() []string {
 	return oids
 }
 
+// getPR fetches a PR by number. Pass an empty string to use the current branch's PR.
 func getPR(number string) (PR, error) {
-	cmd := exec.Command("gh", "pr", "view", number, "--json", "number,title,body,headRefName,commits")
+	args := []string{"pr", "view", "--json", "number,title,body,headRefName,commits"}
+	if number != "" {
+		args = append([]string{"pr", "view", number}, args[2:]...)
+	}
+	cmd := exec.Command("gh", args...)
 	out, err := cmd.Output()
 	if err != nil {
-		return PR{}, fmt.Errorf("gh pr view %s failed: %s", number, strings.TrimSpace(string(out)))
+		ref := number
+		if ref == "" {
+			ref = "current branch"
+		}
+		return PR{}, fmt.Errorf("gh pr view %s failed: %s", ref, strings.TrimSpace(string(out)))
 	}
 	var pr PR
 	if err := json.Unmarshal(out, &pr); err != nil {
