@@ -3,8 +3,43 @@ package main
 import (
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 )
+
+var commitSHARegex = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+
+func isCommitSHA(s string) bool {
+	return commitSHARegex.MatchString(s)
+}
+
+type CommitInfo struct {
+	SHA     string
+	Subject string
+	Body    string
+}
+
+func getCommitInfo(sha string) (CommitInfo, error) {
+	subject, err := gitLogFormat(sha, "%s")
+	if err != nil {
+		return CommitInfo{}, fmt.Errorf("commit %s not found: %w", sha, err)
+	}
+	body, _ := gitLogFormat(sha, "%b")
+	full, _ := gitLogFormat(sha, "%H")
+	if full == "" {
+		full = sha
+	}
+	return CommitInfo{SHA: full, Subject: strings.TrimSpace(subject), Body: strings.TrimSpace(body)}, nil
+}
+
+func gitLogFormat(sha, format string) (string, error) {
+	cmd := exec.Command("git", "log", "-1", "--format="+format, sha)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
 
 func checkPrerequisites() error {
 	if err := exec.Command("git", "rev-parse", "--git-dir").Run(); err != nil {
