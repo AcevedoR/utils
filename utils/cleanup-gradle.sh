@@ -30,3 +30,8 @@ done < <(find "$REPOS_ROOT" -type d -name "build" -not -path "*/.git/*" 2>/dev/n
 total_mb=$(( total_freed / 1024 ))
 echo ""
 echo "[$(ts)] Removed $count build director$([ "$count" -eq 1 ] && echo y || echo ies), freed ~${total_mb} MB."
+
+if [[ -n "${CLEANUP_REPORT_FILE:-}" ]]; then
+  echo "gradle_dirs=${count}"            >> "$CLEANUP_REPORT_FILE"
+  echo "gradle_bytes=$(( total_freed * 1024 ))" >> "$CLEANUP_REPORT_FILE"
+fi
