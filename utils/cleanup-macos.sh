@@ -5,26 +5,39 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 usage() {
-  echo "Usage: $0 [--docker] [--gradle] [--all]"
+  echo "Usage: $0 [--docker] [--gradle] [--caches] [--deep] [--all]"
   echo "  Default (no flags): runs all cleanup scripts"
+  echo "  --caches   package-manager & app caches (npm, brew, Spotify, …)"
+  echo "  --deep     with --caches/--all, also wipe Gradle/Maven/JetBrains"
+  echo "             caches (safe, but re-downloaded/re-indexed next build)"
   exit 1
 }
 
 run_docker=false
 run_gradle=false
+run_caches=false
+deep=false
 
 if [[ $# -eq 0 ]]; then
   run_docker=true
   run_gradle=true
+  run_caches=true
 else
   for arg in "$@"; do
     case "$arg" in
       --docker) run_docker=true ;;
       --gradle) run_gradle=true ;;
-      --all)    run_docker=true; run_gradle=true ;;
+      --caches) run_caches=true ;;
+      --deep)   deep=true ;;
+      --all)    run_docker=true; run_gradle=true; run_caches=true ;;
       *) usage ;;
     esac
   done
+fi
+
+# --deep is meaningless on its own; imply the caches pass.
+if $deep && ! $run_caches; then
+  run_caches=true
 fi
 
 REPORT_FILE=$(mktemp)
@@ -43,6 +56,15 @@ fi
 if $run_gradle; then
   echo ""
   bash "$SCRIPT_DIR/cleanup-gradle.sh"
+fi
+
+if $run_caches; then
+  echo ""
+  if $deep; then
+    bash "$SCRIPT_DIR/cleanup-caches.sh" --deep
+  else
+    bash "$SCRIPT_DIR/cleanup-caches.sh"
+  fi
 fi
 
 # ── Report helpers ──────────────────────────────────────────────────────────
@@ -79,6 +101,13 @@ if $run_gradle; then
   total=$(( total + g_bytes ))
 fi
 
+if $run_caches; then
+  c_pkg=$(_rpt caches_pkg)
+  c_app=$(_rpt caches_app)
+  c_dev=$(_rpt caches_dev)
+  total=$(( total + c_pkg + c_app + c_dev ))
+fi
+
 # ── Print table ──────────────────────────────────────────────────────────────
 
 echo ""
@@ -96,6 +125,12 @@ fi
 
 if $run_gradle; then
   _row "Gradle build dirs (${g_dirs} removed)" "$(_fmt "$g_bytes")"
+fi
+
+if $run_caches; then
+  _row "Package-manager caches"    "$(_fmt "$c_pkg")"
+  _row "Application caches"         "$(_fmt "$c_app")"
+  $deep && _row "Dev tool caches (deep)"  "$(_fmt "$c_dev")"
 fi
 
 _line ╠ ╬ ╣
