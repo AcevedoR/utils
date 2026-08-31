@@ -57,6 +57,24 @@ _reclaim() {
   printf -v "$bucket" '%d' "$(( ${!bucket:-0} + before ))"
 }
 
+# Delete files older than N days under a dir (dir itself is kept, since it's
+# actively written to). Accumulates into the named bucket variable.
+_reclaim_old_files() {
+  local bucket="$1" label="$2" dir="$3" days="$4"
+  local before=0
+  if [[ -d "$dir" ]]; then
+    before=$(find "$dir" -type f -mtime "+${days}" -exec du -sk {} + 2>/dev/null \
+      | awk '{sum+=$1} END{print (sum+0)*1024}')
+    find "$dir" -type f -mtime "+${days}" -delete 2>/dev/null || true
+  fi
+  if [[ "${before:-0}" -gt 0 ]]; then
+    printf '  %-24s %s\n' "$label" "freed $(_fmt "$before")"
+  else
+    printf '  %-24s %s\n' "$label" "nothing to remove"
+  fi
+  printf -v "$bucket" '%d' "$(( ${!bucket:-0} + ${before:-0} ))"
+}
+
 echo "=================================================="
 echo "[$(ts)] Cache Cleanup$( $deep && echo ' (deep)')"
 echo "=================================================="
@@ -88,6 +106,7 @@ _reclaim app_bytes "spotify"     "$HOME/Library/Caches/com.spotify.client"
 _reclaim app_bytes "chrome"      "$HOME/Library/Caches/Google"
 _reclaim app_bytes "*-updaters"  $HOME/Library/Caches/*-updater
 _reclaim app_bytes "trash"       "$HOME/.Trash"/* "$HOME/.Trash"/.[!.]*
+_reclaim_old_files app_bytes "old logs (14d+)" "$HOME/Library/Logs" 14
 
 # ── Heavy dev caches (re-download / re-index on next build) ───────────────────
 if $deep; then
