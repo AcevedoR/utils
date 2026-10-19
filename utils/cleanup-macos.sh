@@ -5,37 +5,73 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 usage() {
-  echo "Usage: $0 [--docker] [--gradle] [--caches] [--deep] [--all] [--analyze]"
-  echo "  Default (no flags): runs all cleanup scripts"
+  echo "Usage: $0 [--docker] [--gradle] [--node] [--caches] [--deep] [--all]"
+  echo "          [--dry-run] [--analyze]"
+  echo "  Default (no flags): Docker + transparent caches only"
   echo "  --caches   package-manager & app caches (npm, brew, Spotify, …)"
-  echo "  --deep     with --caches/--all, also wipe Gradle/Maven/JetBrains"
-  echo "             caches (safe, but re-downloaded/re-indexed next build)"
+  echo "  --deep     opt in to the passes that force a rebuild next time:"
+  echo "             project build/ + .gradle/, project node_modules/ + .nx/"
+  echo "             + dist/, and the global Gradle/Maven/JetBrains caches."
+  echo "             Required for --gradle and --node to run as part of --all"
+  echo "             or the default run."
+  echo "  --gradle   project build/ output and per-project .gradle/ caches"
+  echo "  --node     project node_modules/, .nx/ and dist/ directories that"
+  echo "             have not been touched in \$CLEANUP_NODE_DAYS days (default 14)"
+  echo "  --dry-run  list everything that would be removed, delete nothing"
   echo "  --analyze  skip cleanup, just print disk usage + biggest space hogs"
   exit 1
 }
 
 run_docker=false
 run_gradle=false
+run_node=false
 run_caches=false
 deep=false
+dry_run=false
 analyze_only=false
 
-if [[ $# -eq 0 ]]; then
+# --dry-run and --deep are modifiers, not passes: strip them first so a bare
+# "--dry-run" still means "every pass, deleting nothing".
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) dry_run=true ;;
+    --deep)    deep=true ;;
+    *)         args+=("$arg") ;;
+  esac
+done
+
+# The gradle and node passes delete work that has to be rebuilt or reinstalled,
+# not just re-downloaded, so they sit behind --deep alongside the global dev
+# caches. Naming --gradle or --node explicitly is still a direct opt-in.
+if [[ ${#args[@]} -eq 0 ]]; then
   run_docker=true
-  run_gradle=true
   run_caches=true
+  if $deep; then
+    run_gradle=true
+    run_node=true
+  fi
 else
-  for arg in "$@"; do
+  for arg in "${args[@]}"; do
     case "$arg" in
       --docker)  run_docker=true ;;
       --gradle)  run_gradle=true ;;
+      --node)    run_node=true ;;
       --caches)  run_caches=true ;;
-      --deep)    deep=true ;;
-      --all)     run_docker=true; run_gradle=true; run_caches=true ;;
+      --all)     run_docker=true; run_caches=true
+                 if $deep; then run_gradle=true; run_node=true; fi ;;
       --analyze) analyze_only=true ;;
       *) usage ;;
     esac
   done
+fi
+
+export CLEANUP_DRY_RUN="$dry_run"
+
+# Docker prune has no dry-run mode, so skip it rather than delete during one.
+if $dry_run && $run_docker; then
+  run_docker=false
+  docker_skipped_for_dry_run=true
 fi
 
 # --deep is meaningless on its own; imply the caches pass.
@@ -121,7 +157,7 @@ export CLEANUP_REPORT_FILE="$REPORT_FILE"
 trap 'rm -f "$REPORT_FILE"' EXIT
 
 echo "=================================================="
-echo "[$(ts)] macOS Cleanup"
+echo "[$(ts)] macOS Cleanup$( $dry_run && echo ' (dry run)')"
 echo "=================================================="
 echo ""
 disk_summary "Disk Usage — Before"
@@ -134,6 +170,11 @@ fi
 if $run_gradle; then
   echo ""
   bash "$SCRIPT_DIR/cleanup-gradle.sh"
+fi
+
+if $run_node; then
+  echo ""
+  bash "$SCRIPT_DIR/cleanup-node.sh"
 fi
 
 if $run_caches; then
@@ -167,6 +208,12 @@ if $run_gradle; then
   total=$(( total + g_bytes ))
 fi
 
+if $run_node; then
+  n_dirs=$(_rpt node_dirs)
+  n_bytes=$(_rpt node_bytes)
+  total=$(( total + n_bytes ))
+fi
+
 if $run_caches; then
   c_pkg=$(_rpt caches_pkg)
   c_app=$(_rpt caches_app)
@@ -190,7 +237,11 @@ if $run_docker; then
 fi
 
 if $run_gradle; then
-  _row "Gradle build dirs (${g_dirs} removed)" "$(_fmt "$g_bytes")"
+  _row "Gradle dirs (${g_dirs})" "$(_fmt "$g_bytes")"
+fi
+
+if $run_node; then
+  _row "Node/JS dirs (${n_dirs})" "$(_fmt "$n_bytes")"
 fi
 
 if $run_caches; then
@@ -200,8 +251,16 @@ if $run_caches; then
 fi
 
 _line ╠ ╬ ╣
-_row "TOTAL" "$(_fmt "$total")"
+_row "$( $dry_run && echo 'TOTAL (dry run)' || echo 'TOTAL')" "$(_fmt "$total")"
 _line ╚ ╩ ╝
+
+if $dry_run; then
+  echo ""
+  echo "${BOLD}Dry run — nothing was deleted.${RESET} Re-run without --dry-run to apply."
+  if ${docker_skipped_for_dry_run:-false}; then
+    echo "Docker pass skipped: docker prune has no dry-run mode."
+  fi
+fi
 
 echo ""
 disk_summary "Disk Usage — After"

@@ -13,6 +13,7 @@ shopt -s nullglob
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 deep=false
+dry_run=${CLEANUP_DRY_RUN:-false}
 for arg in "$@"; do
   case "$arg" in
     --deep) deep=true ;;
@@ -46,11 +47,15 @@ _reclaim() {
   local before
   before=$(_size_bytes "$@")
   if [[ "$before" -gt 0 ]]; then
-    for p in "$@"; do
-      [[ -e "$p" ]] || continue
-      rm -rf "$p" 2>/dev/null || true
-    done
-    printf '  %-24s %s\n' "$label" "freed $(_fmt "$before")"
+    if $dry_run; then
+      printf '  %-24s %s\n' "$label" "would free $(_fmt "$before")"
+    else
+      for p in "$@"; do
+        [[ -e "$p" ]] || continue
+        rm -rf "$p" 2>/dev/null || true
+      done
+      printf '  %-24s %s\n' "$label" "freed $(_fmt "$before")"
+    fi
   else
     printf '  %-24s %s\n' "$label" "nothing to remove"
   fi
@@ -65,10 +70,10 @@ _reclaim_old_files() {
   if [[ -d "$dir" ]]; then
     before=$(find "$dir" -type f -mtime "+${days}" -exec du -sk {} + 2>/dev/null \
       | awk '{sum+=$1} END{print (sum+0)*1024}')
-    find "$dir" -type f -mtime "+${days}" -delete 2>/dev/null || true
+    $dry_run || find "$dir" -type f -mtime "+${days}" -delete 2>/dev/null || true
   fi
   if [[ "${before:-0}" -gt 0 ]]; then
-    printf '  %-24s %s\n' "$label" "freed $(_fmt "$before")"
+    printf '  %-24s %s\n' "$label" "$( $dry_run && echo would\ free || echo freed) $(_fmt "$before")"
   else
     printf '  %-24s %s\n' "$label" "nothing to remove"
   fi
@@ -76,7 +81,7 @@ _reclaim_old_files() {
 }
 
 echo "=================================================="
-echo "[$(ts)] Cache Cleanup$( $deep && echo ' (deep)')"
+echo "[$(ts)] Cache Cleanup$( $deep && echo ' (deep)')$( $dry_run && echo ' (dry run)')"
 echo "=================================================="
 
 pkg_bytes=0
@@ -92,10 +97,15 @@ _reclaim pkg_bytes "playwright" "$HOME/Library/Caches/ms-playwright"
 if command -v brew >/dev/null 2>&1; then
   brew_cache="$(brew --cache 2>/dev/null || true)"
   before=$(_size_bytes "$brew_cache")
-  brew cleanup -s >/dev/null 2>&1 || true
-  after=$(_size_bytes "$brew_cache")
-  freed=$(( before > after ? before - after : 0 ))
-  printf '  %-24s %s\n' "homebrew" "freed $(_fmt "$freed")"
+  if $dry_run; then
+    printf '  %-24s %s\n' "homebrew" "would free up to $(_fmt "$before")"
+    freed=0
+  else
+    brew cleanup -s >/dev/null 2>&1 || true
+    after=$(_size_bytes "$brew_cache")
+    freed=$(( before > after ? before - after : 0 ))
+    printf '  %-24s %s\n' "homebrew" "freed $(_fmt "$freed")"
+  fi
   pkg_bytes=$(( pkg_bytes + freed ))
 fi
 
@@ -119,7 +129,7 @@ fi
 
 total=$(( pkg_bytes + app_bytes + dev_bytes ))
 echo ""
-echo "[$(ts)] Cache cleanup complete — freed $(_fmt "$total")."
+echo "[$(ts)] Cache cleanup complete — $( $dry_run && echo "would free" || echo freed) $(_fmt "$total")."
 
 if [[ -n "${CLEANUP_REPORT_FILE:-}" ]]; then
   {
